@@ -3,176 +3,9 @@
   <head>
     <meta charset="utf8">
     <title>Ping Me</title>
-
-    <style>
-
-      div#result {
-        width: 60%;
-        height: 400px;
-        border: 1px solid grey;
-      }
-
-      div#status {
-        width: 60%;
-        height: 40px;
-        margin-bottom: 4px;
-        border: 1px solid grey;
-      }
-
-      input#content-url {
-        width: 50%;
-      }
-      
-    </style>
-
+    <link rel="stylesheet" href="style.css">
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
-    
-    <script>
-
-      // make sure we don't kick anything off until the charts are available
-      var chartsLoaded = false
-      google.charts.load('current', {packages: ['corechart', 'line']});
-      google.charts.setOnLoadCallback(function () { chartsLoaded = true });
-
-      // some configuration
-      var pingconfig = {}
-      pingconfig.pingURL = new URL("/ping", window.location.href)
-      pingconfig.contentURL = "https://cdn.spacetelescope.org/archives/images/large/heic0611b.jpg"
-
-      // utility function to sleep a bit
-      function sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-      }
-
-      function renderPingSeries(pingJson) {
-
-        // dump ping results into a data table
-        var chartData = new google.visualization.DataTable();
-        chartData.addColumn('number', 'seq');
-        chartData.addColumn('number', 'RTT');
-
-        console.log(pingJson)
-
-        for (let pingResult of pingJson.results) {
-          chartData.addRow([pingResult.seq, pingResult.rtt])
-        }
-
-        // label the axes
-        var chartOptions = {
-          hAxis: {
-            title: 'ICMP sequence (500ms intervals)'
-          },
-          vAxis: {
-            title: 'RTT (ms)'
-          }
-        };
-
-        // plot in the result div
-        var chart = new google.visualization.LineChart(document.getElementById("result"));
-        chart.draw(chartData, chartOptions);
-      }
-
-      async function pingMe() {
-        var statusElement = document.getElementById("status")
-
-        var downloadStart = new Date()
-        var pingDuration
-        var ok
-
-        // check chart load
-        if (!chartsLoaded) {
-          statusElement.textContent = "Google Charts not yet loaded, please wait a bit."
-          return
-        }
-
-        // load content URL
-        pingconfig.contentURL = document.getElementById("content-url").value
-
-        // intial download
-        statusElement.textContent = "step 1: downloading content to determine ping duration"
-
-        ok = await fetch(pingconfig.contentURL, {cache: "no-store"}).then(function (response) {
-          return response.blob()
-        }).then(function (blob) {
-          pingDuration = 10 + Math.floor((new Date() - downloadStart) / 1000)
-          return true
-        }).catch(function (error) {
-          statusElement.textContent = "initial content download failed; see console"
-          console.log(error)
-        })
-
-        if (!ok) {
-          return
-        }
-
-        // request ping
-        statusElement.textContent = "step 2: starting ping for " + pingDuration + " seconds" 
-
-        var pingResponse = await fetch(pingconfig.pingURL + "?period=0.5&duration=" + pingDuration).then(function (response) {
-          return response
-        })
-
-        if (pingResponse.status > 299) {
-          statusElement.textContent = "ping failed; see console"
-          console.log("" + pingResponse.status + ": " + await pingResponse.blob())
-          return
-        }
-
-        var pingResponseJson = await pingResponse.json()
-
-        var pingStart = new Date()
-        var pingResultLink = new URL(pingResponseJson.link, pingconfig.pingURL)
-
-        // wait four seconds to get baseline ping data, then start the download
-        await sleep(4000)
-
-        statusElement.textContent = "step 3: downloading content to load link" 
-
-        ok = await fetch(pingconfig.contentURL, {cache: "no-store"}).then(function (response) {
-          return response.blob()
-        }).then(function (blob) {
-          return true
-        }).catch(function (error) {
-          statusElement.textContent = "primary content download failed; see console"
-          console.log(error)
-          return false
-        })
-
-        if (!ok) {
-          return
-        }
-
-        // we know how long we asked to be pinged. we know how long the download took.
-        // now wait the rest of the time...
-        var waitDuration = (pingDuration + 3) * 1000 - (new Date() - pingStart)
-        if (waitDuration > 0) {
-          statusElement.textContent = "step 4: waiting "+Math.round(waitDuration / 1000)+"s for ping to complete"
-          await sleep(waitDuration)
-        }
-
-        // get results and render them
-        ok = await fetch(pingResultLink).then(function (response) {
-          return response.json()
-        }).then(function (json) {
-          if (json.error) {
-            document.getElementById("result").textContent("No RTT data available. Your ISP probably blocks ICMP.")
-          } else {
-            renderPingSeries(json)
-          }
-          return true
-        }).catch(function (error) {
-          statusElement.textContent = "ping result retrieval failed; see console"
-          console.log(error)
-          return false
-        })
-
-        if (!ok) {
-          return
-        }
-
-        statusElement.textContent =  "measurement complete: results from "+pingResultLink.toString()
-      }
-    </script>
+    <script type="text/javascript" src="ping.js"></script>
   </head>
   <body>
 
@@ -204,7 +37,7 @@
 
         <form>
           Content: <input type="url" id="content-url"></input>
-          <input type="button" onclick="pingMe()" value="Start"></button>
+          <input id="startBtn" disabled type="button" onclick="pingMe()" value="Start"></button>
         </form>
       
       </div>
@@ -273,7 +106,6 @@
     requesting deletion.</p>
 
     <script>
-      var pingconfig
       document.getElementById("content-url").value = pingconfig.contentURL
     </script>
   </body>
